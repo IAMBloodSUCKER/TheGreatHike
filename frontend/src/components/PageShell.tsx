@@ -34,13 +34,6 @@ export default function PageShell({ children, wide = false, showSidebar = false 
               <li>Верзила ~500 г</li>
             </ul>
           </div>
-          <div className="rail-card rail-card--admin">
-            <h4>Админка</h4>
-            <p>
-              Войдите как <strong>admin</strong> → кнопка «Админка» в шапке → капча и секретный ключ из{' '}
-              <code>ADMIN_SECRET_KEY</code>.
-            </p>
-          </div>
           <div className="rail-card rail-card--tips">
             {SIDE_TIPS.map((tip) => (
               <p key={tip}>{tip}</p>

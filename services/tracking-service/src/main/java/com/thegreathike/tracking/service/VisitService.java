@@ -127,7 +127,6 @@ public class VisitService {
         DateTimeFormatter dateFormatter = DateTimeFormatter.ofPattern("dd.MM.yyyy HH:mm", Locale.forLanguageTag("ru"));
 
         StringBuilder sb = new StringBuilder();
-        sb.append('\uFEFF');
         sb.append("sep=").append(CSV_DELIM).append('\n');
         sb.append("Дата и время").append(CSV_DELIM)
                 .append("Количество").append(CSV_DELIM)
@@ -139,12 +138,12 @@ public class VisitService {
         for (Visit v : visits) {
             StoolColor color = resolveColor(v);
             String dateStr = dateFormatter.format(v.getVisitedAt().atZone(zone));
-            sb.append(escapeCsv(dateStr)).append(CSV_DELIM)
+            sb.append(quoteCsv(dateStr)).append(CSV_DELIM)
                     .append(v.getCount()).append(CSV_DELIM)
-                    .append(escapeCsv(consistencyLabel(v))).append(CSV_DELIM)
-                    .append(escapeCsv(color.getLabel())).append(CSV_DELIM)
+                    .append(quoteCsv(consistencyLabel(v))).append(CSV_DELIM)
+                    .append(quoteCsv(color.getLabel())).append(CSV_DELIM)
                     .append(v.getTotalGrams()).append(CSV_DELIM)
-                    .append(escapeCsv(v.getNote())).append('\n');
+                    .append(quoteCsv(v.getNote())).append('\n');
         }
         return sb.toString();
     }
@@ -210,14 +209,10 @@ public class VisitService {
         return visit.getColor() != null ? visit.getColor() : StoolColor.BROWN;
     }
 
-    private String escapeCsv(String value) {
+    private String quoteCsv(String value) {
         if (value == null) {
-            return "";
+            return "\"\"";
         }
-        if (value.contains(String.valueOf(CSV_DELIM)) || value.contains(",") || value.contains("\"")
-                || value.contains("\n") || value.contains("\r")) {
-            return "\"" + value.replace("\"", "\"\"") + "\"";
-        }
-        return value;
+        return "\"" + value.replace("\"", "\"\"") + "\"";
     }
 }

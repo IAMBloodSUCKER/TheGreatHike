@@ -12,6 +12,7 @@ public record AdminUserResponse(
         Gender gender,
         boolean admin,
         boolean blocked,
+        String blockComment,
         long feedbackCount,
         long unrepliedFeedbackCount
 ) {}

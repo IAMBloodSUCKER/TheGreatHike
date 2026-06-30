@@ -404,6 +404,53 @@ textarea::-webkit-scrollbar-corner,
   color: #f0d060;
 }
 
+.auth-blocked-key-head {
+  margin-bottom: 16px;
+}
+
+.auth-blocked-info {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+
+.auth-blocked-title {
+  margin: 0;
+  font-size: 1.35rem;
+  color: #f87171;
+}
+
+.auth-blocked-message {
+  margin: 0;
+  line-height: 1.55;
+  white-space: pre-wrap;
+  color: var(--text-muted);
+}
+
+.admin-block-comment {
+  margin-bottom: 16px;
+  padding: 12px 14px;
+  border-radius: var(--radius);
+  border: 1px solid rgba(248, 113, 113, 0.25);
+  background: rgba(248, 113, 113, 0.08);
+}
+
+.admin-block-comment-label {
+  display: block;
+  margin-bottom: 6px;
+  font-size: 0.82rem;
+  font-weight: 600;
+  color: #f87171;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
+
+.admin-block-comment p {
+  margin: 0;
+  white-space: pre-wrap;
+  line-height: 1.5;
+}
+
 .gender-picker {
   display: grid;
   grid-template-columns: 1fr 1fr;

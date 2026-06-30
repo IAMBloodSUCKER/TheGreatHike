@@ -50,9 +50,20 @@ public class AuthController {
     }
 
     @PostMapping("/login")
-    public AuthResponse login(@Valid @RequestBody LoginRequest request, HttpServletRequest httpRequest) {
+    public LoginResponse login(@Valid @RequestBody LoginRequest request, HttpServletRequest httpRequest) {
         try {
             return authService.login(request, httpRequest);
+        } catch (IllegalArgumentException e) {
+            throw new ResponseStatusException(HttpStatus.UNAUTHORIZED, e.getMessage());
+        }
+    }
+
+    @PostMapping("/blocked-reveal")
+    public BlockedRevealResponse blockedReveal(
+            @Valid @RequestBody BlockedRevealRequest request,
+            HttpServletRequest httpRequest) {
+        try {
+            return authService.revealBlockedAccount(request, httpRequest);
         } catch (IllegalArgumentException e) {
             throw new ResponseStatusException(HttpStatus.UNAUTHORIZED, e.getMessage());
         }

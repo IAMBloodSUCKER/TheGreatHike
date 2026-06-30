@@ -1,6 +1,7 @@
 import type { ReactNode } from 'react';
 import { safeEmoji } from '../emoji';
-import { BundleKind, bundleFootprintPx, ObjectDimensions, stackDisplayHeightPx } from '../objectDimensions';
+import { decomposeIntoPacks, layoutPacksOnGround, PackKind, PACK_PROFILES } from '../packLayout';
+import { bundleFootprintPx, ObjectDimensions, stackDisplayHeightPx } from '../objectDimensions';
 
 const MM_TO_PX_RATIO = 138 / 1700;
 
@@ -120,18 +121,6 @@ export function BookStackVisual({
       {layers.map((layer, i) => (
         <BookShape key={`book-${i}`} x={layer.x} y={layer.y} w={drawW} h={layer.h} tone={layer.tone} />
       ))}
-      {partial > 0.05 && (
-        <line
-          x1={cx - drawW / 2 - 2}
-          y1={groundY - totalH}
-          x2={cx + drawW / 2 + 2}
-          y2={groundY - totalH}
-          stroke="var(--accent)"
-          strokeWidth="0.8"
-          strokeDasharray="2 2"
-          opacity="0.85"
-        />
-      )}
       {emoji && visualLayers <= 4 && (
         <text
           x={cx}
@@ -185,7 +174,6 @@ function KeyBunchShape({
   y,
   w,
   h,
-  fullness = 1,
 }: {
   x: number;
   y: number;
@@ -193,33 +181,51 @@ function KeyBunchShape({
   h: number;
   fullness?: number;
 }) {
-  const ringCx = x + w * 0.38;
-  const ringCy = y + h * 0.58;
-  const ringR = Math.min(w, h) * 0.16;
-  const keyCount = Math.max(2, Math.round(6 * Math.min(1, fullness)));
-  const angles = [-0.55, -0.2, 0.15, 0.45, 0.72, 0.95].slice(0, keyCount);
+  const ringCx = x + w * 0.42;
+  const ringCy = y + h * 0.62;
+  const ringR = Math.min(w, h) * 0.2;
+  const keyCount = 8;
+  const angles = [-0.75, -0.45, -0.15, 0.12, 0.38, 0.62, 0.85, 1.05];
 
   return (
     <g>
-      <circle cx={ringCx} cy={ringCy} r={ringR} fill="none" stroke="#c9a227" strokeWidth={Math.max(1.2, ringR * 0.22)} />
-      {angles.map((angle, i) => {
-        const len = h * 0.42;
+      <ellipse cx={x + w / 2} cy={y + h * 0.96} rx={w * 0.44} ry={h * 0.06} fill="#000" opacity="0.14" />
+      <circle
+        cx={ringCx}
+        cy={ringCy}
+        r={ringR}
+        fill="none"
+        stroke="#e0b830"
+        strokeWidth={Math.max(2, ringR * 0.28)}
+      />
+      {angles.slice(0, keyCount).map((angle, i) => {
+        const len = h * 0.5;
         const tipX = ringCx + Math.sin(angle) * len;
         const tipY = ringCy - Math.cos(angle) * len;
+        const shaftW = Math.max(2.2, w * 0.09);
         return (
-          <line
-            key={`k-${i}`}
-            x1={ringCx + Math.sin(angle) * ringR * 0.7}
-            y1={ringCy - Math.cos(angle) * ringR * 0.7}
-            x2={tipX}
-            y2={tipY}
-            stroke="#c9b060"
-            strokeWidth={Math.max(1.5, w * 0.07)}
-            strokeLinecap="round"
-          />
+          <g key={`k-${i}`}>
+            <line
+              x1={ringCx + Math.sin(angle) * ringR * 0.75}
+              y1={ringCy - Math.cos(angle) * ringR * 0.75}
+              x2={tipX}
+              y2={tipY}
+              stroke="#d4b84a"
+              strokeWidth={shaftW}
+              strokeLinecap="round"
+            />
+            <circle cx={tipX} cy={tipY} r={shaftW * 0.9} fill="#c9a830" stroke="#7a6530" strokeWidth="0.4" />
+            <circle
+              cx={ringCx + Math.sin(angle) * ringR * 1.1}
+              cy={ringCy - Math.cos(angle) * ringR * 1.1}
+              r={shaftW * 1.1}
+              fill="#e8cc60"
+              stroke="#8a7340"
+              strokeWidth="0.5"
+            />
+          </g>
         );
       })}
-      <circle cx={ringCx} cy={ringCy} r={ringR * 0.35} fill="#8a7340" opacity="0.35" />
     </g>
   );
 }
@@ -328,6 +334,245 @@ function PaperclipBunchShape({ x, y, w, h }: { x: number; y: number; w: number; 
   return <g>{clips}</g>;
 }
 
+function PackShape({
+  kind,
+  packSize,
+  x,
+  y,
+  w,
+  h,
+}: {
+  kind: PackKind;
+  packSize: number;
+  x: number;
+  y: number;
+  w: number;
+  h: number;
+}) {
+  switch (kind) {
+    case 'balls':
+      return <BallPackShape x={x} y={y} w={w} h={h} count={packSize} />;
+    case 'sponges':
+      return <SpongePackShape x={x} y={y} w={w} h={h} count={packSize} />;
+    case 'oranges':
+      return <OrangePackShape x={x} y={y} w={w} h={h} count={packSize} />;
+    case 'chocolate':
+      return <ChocolatePackShape x={x} y={y} w={w} h={h} count={packSize} />;
+    case 'socks':
+      return <SockPackShape x={x} y={y} w={w} h={h} count={packSize} />;
+    case 'caterpillars':
+      return <CaterpillarPackShape x={x} y={y} w={w} h={h} count={packSize} />;
+    case 'keys':
+      return packSize <= 1 ? (
+        <SingleKeyShape x={x} y={y} w={w} h={h} />
+      ) : (
+        <KeyBunchShape x={x} y={y} w={w} h={h} />
+      );
+    case 'pens':
+      return packSize <= 1 ? (
+        <SinglePenShape x={x} y={y} w={w} h={h} />
+      ) : (
+        <PenBundleShape x={x} y={y} w={w} h={h} />
+      );
+    case 'pencils':
+      return packSize <= 1 ? (
+        <SinglePencilShape x={x} y={y} w={w} h={h} />
+      ) : (
+        <PencilBundleShape x={x} y={y} w={w} h={h} />
+      );
+    case 'coins':
+      return <CoinRollShape x={x} y={y} w={w} h={h} />;
+    case 'matches':
+      return <MatchboxBundleShape x={x} y={y} w={w} h={h} />;
+    case 'clips':
+      return <PaperclipBunchShape x={x} y={y} w={w} h={h} />;
+    default:
+      return <OrangePackShape x={x} y={y} w={w} h={h} count={Math.min(packSize, 5)} />;
+  }
+}
+
+function BallPackShape({ x, y, w, h, count }: { x: number; y: number; w: number; h: number; count: number }) {
+  const r = Math.min(w, h) * 0.22;
+  const cy = y + h - r - 2;
+  const positions =
+    count >= 5
+      ? [
+          { cx: x + w * 0.5, cy: cy - r * 1.6 },
+          { cx: x + w * 0.32, cy },
+          { cx: x + w * 0.68, cy },
+          { cx: x + w * 0.22, cy: cy - r * 0.5 },
+          { cx: x + w * 0.78, cy: cy - r * 0.5 },
+        ]
+      : count >= 3
+        ? [
+            { cx: x + w * 0.5, cy: cy - r * 0.9 },
+            { cx: x + w * 0.3, cy },
+            { cx: x + w * 0.7, cy },
+          ]
+        : [{ cx: x + w * 0.5, cy }];
+
+  return (
+    <g>
+      {count > 1 && (
+        <path
+          d={`M ${x + 4} ${y + h - 2} Q ${x + w / 2} ${y + 4} ${x + w - 4} ${y + h - 2}`}
+          fill="none"
+          stroke="rgba(255,255,255,0.2)"
+          strokeWidth="1"
+        />
+      )}
+      {positions.map((p, i) => (
+        <g key={`ball-${i}`}>
+          <circle cx={p.cx} cy={p.cy} r={r} fill="#f5f5f0" stroke="#888" strokeWidth="0.6" />
+          <path
+            d={`M ${p.cx - r * 0.6} ${p.cy} Q ${p.cx} ${p.cy - r * 0.3} ${p.cx + r * 0.6} ${p.cy}`}
+            fill="none"
+            stroke="#aaa"
+            strokeWidth="0.5"
+          />
+        </g>
+      ))}
+    </g>
+  );
+}
+
+function SpongePackShape({ x, y, w, h, count }: { x: number; y: number; w: number; h: number; count: number }) {
+  const layers = count >= 10 ? 4 : count >= 5 ? 3 : 1;
+  const layerH = h / layers;
+  return (
+    <g>
+      {Array.from({ length: layers }, (_, i) => (
+        <g key={`sp-${i}`}>
+          <rect
+            x={x + i * 2}
+            y={y + h - (i + 1) * layerH}
+            width={w - i * 3}
+            height={layerH - 2}
+            rx={3}
+            fill={`hsl(48, ${70 - i * 5}%, ${52 + i * 4}%)`}
+            stroke="#8a9030"
+            strokeWidth="0.5"
+          />
+        </g>
+      ))}
+    </g>
+  );
+}
+
+function OrangePackShape({ x, y, w, h, count }: { x: number; y: number; w: number; h: number; count: number }) {
+  if (count >= 20) {
+    return (
+      <g>
+        <rect x={x} y={y + h * 0.2} width={w} height={h * 0.75} rx={3} fill="#8b5a2b" stroke="#5a3818" strokeWidth="0.6" />
+        {Array.from({ length: 6 }, (_, i) => (
+          <circle
+            key={`o-${i}`}
+            cx={x + w * (0.2 + (i % 3) * 0.3)}
+            cy={y + h * (0.45 + Math.floor(i / 3) * 0.22)}
+            r={Math.min(w, h) * 0.12}
+            fill="#f08030"
+          />
+        ))}
+      </g>
+    );
+  }
+  const n = Math.min(count, 10);
+  const cols = n <= 3 ? n : n <= 5 ? 3 : 5;
+  const r = Math.min(w / (cols + 1), h * 0.22);
+  return (
+    <g>
+      {Array.from({ length: n }, (_, i) => {
+        const col = i % cols;
+        const row = Math.floor(i / cols);
+        const cx = x + w * 0.5 + (col - (cols - 1) / 2) * r * 2.1;
+        const cy = y + h - r - 2 - row * r * 1.7;
+        return <circle key={`o-${i}`} cx={cx} cy={cy} r={r} fill="#f08030" stroke="#c06020" strokeWidth="0.4" />;
+      })}
+    </g>
+  );
+}
+
+function ChocolatePackShape({ x, y, w, h, count }: { x: number; y: number; w: number; h: number; count: number }) {
+  if (count >= 20) {
+    return (
+      <g>
+        <rect x={x} y={y + h * 0.15} width={w} height={h * 0.8} rx={2} fill="#6a3020" stroke="#3a1810" strokeWidth="0.6" />
+        <rect x={x + w * 0.1} y={y + h * 0.25} width={w * 0.8} height={h * 0.15} rx={1} fill="#a04030" opacity="0.6" />
+      </g>
+    );
+  }
+  const bars = Math.min(count, 15);
+  const cols = bars <= 3 ? bars : bars <= 5 ? 3 : 5;
+  const barW = w / cols - 2;
+  const barH = h * 0.75;
+  return (
+    <g>
+      {Array.from({ length: bars }, (_, i) => {
+        const col = i % cols;
+        const row = Math.floor(i / cols);
+        const bx = x + col * (barW + 2) + 1;
+        const by = y + h - barH - row * (barH * 0.35) - 2;
+        return (
+          <rect key={`ch-${i}`} x={bx} y={by} width={barW} height={barH} rx={1} fill="#8b3a28" stroke="#5a2018" strokeWidth="0.4" />
+        );
+      })}
+    </g>
+  );
+}
+
+function SockPackShape({ x, y, w, h, count }: { x: number; y: number; w: number; h: number; count: number }) {
+  const n = Math.min(count, 12);
+  const hues = [18, 32, 200, 140, 280, 45, 10, 350];
+  return (
+    <g>
+      {Array.from({ length: n }, (_, i) => {
+        const hue = hues[i % hues.length];
+        const ox = (i % 4) * (w * 0.22) - w * 0.1;
+        const oy = Math.floor(i / 4) * (h * 0.18);
+        const cx = x + w * 0.45 + ox;
+        const cy = y + h * 0.75 - oy;
+        return (
+          <ellipse
+            key={`sock-${i}`}
+            cx={cx}
+            cy={cy}
+            rx={w * 0.2}
+            ry={h * 0.22}
+            fill={`hsl(${hue}, 55%, 45%)`}
+            stroke={`hsl(${hue}, 40%, 30%)`}
+            strokeWidth="0.4"
+            transform={`rotate(${(i % 3) * 12 - 12} ${cx} ${cy})`}
+          />
+        );
+      })}
+    </g>
+  );
+}
+
+function CaterpillarPackShape({ x, y, w, h, count }: { x: number; y: number; w: number; h: number; count: number }) {
+  const n = Math.min(count, 5);
+  const segR = Math.min(w / (n * 2.2), h * 0.28);
+  const baseY = y + h - segR - 2;
+  return (
+    <g>
+      {Array.from({ length: n }, (_, i) => {
+        const cx = x + segR + i * segR * 1.9;
+        return (
+          <g key={`cat-${i}`}>
+            <circle cx={cx} cy={baseY} r={segR} fill={`hsl(95, ${50 + i * 3}%, ${38 + i * 4}%)`} stroke="#3a6020" strokeWidth="0.4" />
+            {i === 0 && (
+              <>
+                <circle cx={cx - segR * 0.35} cy={baseY - segR * 0.35} r={segR * 0.12} fill="#1a2018" />
+                <circle cx={cx + segR * 0.15} cy={baseY - segR * 0.35} r={segR * 0.12} fill="#1a2018" />
+              </>
+            )}
+          </g>
+        );
+      })}
+    </g>
+  );
+}
+
 function SinglePenShape({ x, y, w, h }: { x: number; y: number; w: number; h: number }) {
   const pw = w * 0.28;
   const px = x + (w - pw) / 2;
@@ -357,75 +602,7 @@ function SinglePencilShape({ x, y, w, h }: { x: number; y: number; w: number; h:
   );
 }
 
-function SingleBundleShape({
-  kind,
-  x,
-  y,
-  w,
-  h,
-}: {
-  kind: BundleKind;
-  x: number;
-  y: number;
-  w: number;
-  h: number;
-}) {
-  switch (kind) {
-    case 'keys':
-      return <SingleKeyShape x={x} y={y} w={w} h={h} />;
-    case 'pens':
-      return <SinglePenShape x={x} y={y} w={w} h={h} />;
-    case 'pencils':
-      return <SinglePencilShape x={x} y={y} w={w} h={h} />;
-    case 'coins':
-      return <CoinRollShape x={x} y={y} w={w} h={h * 0.35} />;
-    case 'matches':
-      return <MatchboxBundleShape x={x} y={y} w={w * 0.55} h={h} />;
-    case 'clips':
-      return <PaperclipBunchShape x={x} y={y} w={w * 0.6} h={h * 0.7} />;
-    default:
-      return <SingleKeyShape x={x} y={y} w={w} h={h} />;
-  }
-}
-
-function BundleLayerShape({
-  kind,
-  x,
-  y,
-  w,
-  h,
-  fullness,
-}: {
-  kind: BundleKind;
-  x: number;
-  y: number;
-  w: number;
-  h: number;
-  fullness: number;
-}) {
-  switch (kind) {
-    case 'keys':
-      return fullness < 0.45 ? (
-        <SingleKeyShape x={x} y={y} w={w} h={h} />
-      ) : (
-        <KeyBunchShape x={x} y={y} w={w} h={h} fullness={fullness} />
-      );
-    case 'pens':
-      return <PenBundleShape x={x} y={y} w={w} h={h} />;
-    case 'pencils':
-      return <PencilBundleShape x={x} y={y} w={w} h={h} />;
-    case 'coins':
-      return <CoinRollShape x={x} y={y} w={w} h={h} />;
-    case 'matches':
-      return <MatchboxBundleShape x={x} y={y} w={w} h={h} />;
-    case 'clips':
-      return <PaperclipBunchShape x={x} y={y} w={w} h={h} />;
-    default:
-      return <KeyBunchShape x={x} y={y} w={w} h={h} fullness={fullness} />;
-  }
-}
-
-/** Связки/пачки: реальная высота кучи, рисуем до N повторяющихся связок */
+/** Пачки на полу — целые связки, без дробления */
 export function BundleStackVisual({
   cx,
   groundY,
@@ -439,114 +616,31 @@ export function BundleStackVisual({
   dims: ObjectDimensions;
   emoji?: string;
 }) {
-  const kind = dims.bundleKind ?? 'keys';
-  const maxLayers = dims.maxVisualLayers ?? 10;
-  const { widthPx, heightPx } = bundleFootprintPx(dims, mmToPx);
-  const totalH = stackDisplayHeightPx(count, dims, mmToPx);
-  const drawW = Math.max(widthPx, 20);
-
-  if (count < 0.999) {
-    const h = Math.max(heightPx * 0.35, totalH);
-    const top = groundY - h;
-    return (
-      <g>
-        <BundleLayerShape kind={kind} x={cx - drawW / 2} y={top} w={drawW * Math.max(0.25, count)} h={h} fullness={count} />
-      </g>
-    );
-  }
-
-  if (count <= 1.001) {
-    const singleH = mmToPx(dims.sizeMm);
-    const singleW = Math.max(mmToPx(dims.widthMm ?? dims.sizeMm * dims.aspect), 14);
-    const top = groundY - singleH;
-    return (
-      <g>
-        <SingleBundleShape kind={kind} x={cx - singleW / 2} y={top} w={singleW} h={singleH} />
-        {emoji && (
-          <text
-            x={cx}
-            y={top + singleH * 0.5}
-            textAnchor="middle"
-            dominantBaseline="middle"
-            fontSize={Math.max(12, Math.min(singleW, singleH) * 0.45)}
-            className="volume-item-emoji"
-            opacity={0.9}
-          >
-            {safeEmoji(emoji)}
-          </text>
-        )}
-      </g>
-    );
-  }
-
-  const unitsPerBundle = dims.unitsPerBundle ?? 8;
-  if (count < unitsPerBundle) {
-    const top = groundY - heightPx;
-    return (
-      <g>
-        <BundleLayerShape
-          kind={kind}
-          x={cx - drawW / 2}
-          y={top}
-          w={drawW}
-          h={heightPx}
-          fullness={count / unitsPerBundle}
-        />
-      </g>
-    );
-  }
-
-  const bundleCount = count / unitsPerBundle;
-  const fullBundles = Math.floor(bundleCount + 0.001);
-  const partialBundle = bundleCount - fullBundles;
-  const visualLayers = Math.min(maxLayers, Math.max(1, fullBundles + (partialBundle > 0.05 ? 1 : 0)));
-  const stepPx = totalH / visualLayers;
-  const layerH = Math.min(heightPx, stepPx * 0.9);
-  const stagger = Math.min(2.5, drawW * 0.05);
-
-  const layers: { x: number; y: number; h: number; fullness: number }[] = [];
-  for (let i = 0; i < visualLayers; i++) {
-    const isTop = i === visualLayers - 1;
-    const fullness = isTop && partialBundle > 0.05 ? partialBundle : 1;
-    const h = isTop && partialBundle > 0.05 ? layerH * partialBundle : layerH;
-    const y = groundY - (i + 1) * stepPx + (stepPx - h) * 0.5;
-    const xOff = (i % 2 === 0 ? -1 : 1) * stagger * Math.min(i, 2);
-    layers.push({ x: cx - drawW / 2 + xOff, y, h, fullness });
-  }
+  const kind = dims.bundleKind ?? 'discs';
+  const sizes = dims.packSizes ?? PACK_PROFILES[kind].sizes;
+  const whole = Math.max(0, Math.floor(count + 0.0001));
+  const packs = decomposeIntoPacks(whole, sizes);
+  const { placed, hidden } = layoutPacksOnGround(packs, kind, cx, groundY, mmToPx);
 
   return (
     <g>
-      {layers.map((layer, i) => (
-        <BundleLayerShape
-          key={`bundle-${i}`}
-          kind={kind}
-          x={layer.x}
-          y={layer.y}
-          w={drawW}
-          h={layer.h}
-          fullness={layer.fullness}
-        />
+      {placed.map((p, i) => (
+        <PackShape key={`pack-${i}`} kind={kind} packSize={p.size} x={p.x} y={p.y} w={p.w} h={p.h} />
       ))}
-      {partialBundle > 0.05 && (
-        <line
-          x1={cx - drawW / 2 - 2}
-          y1={groundY - totalH}
-          x2={cx + drawW / 2 + 2}
-          y2={groundY - totalH}
-          stroke="var(--accent)"
-          strokeWidth="0.8"
-          strokeDasharray="2 2"
-          opacity="0.85"
-        />
+      {hidden > 0 && (
+        <text x={cx} y={placed.length ? Math.min(...placed.map((p) => p.y)) - 6 : groundY - 12} textAnchor="middle" fill="#9aa8b8" fontSize="9">
+          +{hidden} пачек
+        </text>
       )}
-      {emoji && visualLayers <= 3 && (
+      {emoji && placed.length <= 2 && whole <= 3 && (
         <text
           x={cx}
-          y={groundY - totalH + Math.min(stepPx, layerH) * 0.5}
+          y={groundY - mmToPx(dims.sizeMm) * 0.5}
           textAnchor="middle"
           dominantBaseline="middle"
-          fontSize={Math.max(11, Math.min(drawW, layerH) * 0.42)}
+          fontSize={14}
           className="volume-item-emoji"
+          opacity={0.85}
         >
           {safeEmoji(emoji)}
         </text>
@@ -557,38 +651,29 @@ export function BundleStackVisual({
 
 export function clusterSpreadWidthPx(count: number, dims: ObjectDimensions): number {
   const maxLayers = dims.maxVisualLayers ?? 5;
-  const full = Math.floor(count + 0.001);
-  const partial = count - full;
-  const totalUnits = Math.min(maxLayers, full + (partial > 0.05 ? 1 : 0));
+  const whole = Math.floor(count + 0.001);
+  const totalUnits = Math.min(maxLayers, Math.max(whole, count < 1 ? 1 : 0));
   if (totalUnits <= 1) {
     return unitSizePx(dims).widthPx;
   }
   const { widthPx } = unitSizePx(dims);
-  const overlap = Math.min(widthPx * 0.5, 32);
+  const overlap = Math.min(widthPx * 0.35, 28);
   const spread = widthPx - overlap;
   return widthPx + (totalUnits - 1) * spread;
 }
 
-function clusterUnits(count: number, dims: ObjectDimensions): { cx: number; fraction: number }[] {
+function clusterUnits(count: number, dims: ObjectDimensions): { cx: number }[] {
   const maxLayers = dims.maxVisualLayers ?? 5;
-  const full = Math.floor(count + 0.001);
-  const partial = count - full;
-  const hasPartial = partial > 0.05;
-  const totalUnits = Math.min(maxLayers, full + (hasPartial ? 1 : 0));
-  if (totalUnits <= 0) {
-    return [];
-  }
-
+  const whole = Math.max(1, Math.floor(count + 0.001));
+  const totalUnits = Math.min(maxLayers, whole);
   const { widthPx } = unitSizePx(dims);
-  const overlap = Math.min(widthPx * 0.5, 32);
+  const overlap = Math.min(widthPx * 0.35, 28);
   const spread = widthPx - overlap;
   const totalWidth = widthPx + (totalUnits - 1) * spread;
 
-  const result: { cx: number; fraction: number }[] = [];
+  const result: { cx: number }[] = [];
   for (let i = 0; i < totalUnits; i++) {
-    const cx = -totalWidth / 2 + widthPx / 2 + i * spread;
-    const isPartialLayer = hasPartial && i === totalUnits - 1 && i >= full;
-    result.push({ cx, fraction: isPartialLayer ? partial : 1 });
+    result.push({ cx: -totalWidth / 2 + widthPx / 2 + i * spread });
   }
   return result;
 }
@@ -615,28 +700,19 @@ export function SideClusterVisual({
     clipId: string;
   }) => ReactNode;
 }) {
-  if (count < 0.999) {
-    return (
-      <>
-        {renderUnit({
-          cx,
-          bottom: groundY,
-          fraction: count,
-          stackIndex: 0,
-          clipId: 'cluster-frac',
-        })}
-      </>
-    );
+  const whole = Math.max(0, Math.floor(count + 0.001));
+  if (whole <= 0) {
+    return null;
   }
 
-  const units = clusterUnits(count, dims);
+  const units = clusterUnits(whole, dims);
   return (
     <>
       {units.map((unit, i) =>
         renderUnit({
           cx: cx + unit.cx,
           bottom: groundY,
-          fraction: unit.fraction,
+          fraction: 1,
           stackIndex: i,
           clipId: `cluster-${i}`,
         }),

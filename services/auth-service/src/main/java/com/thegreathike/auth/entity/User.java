@@ -33,6 +33,9 @@ public class User {
     @Column(nullable = false)
     private boolean blocked = false;
 
+    @Column(name = "block_comment")
+    private String blockComment;
+
     @Enumerated(EnumType.STRING)
     @Column(length = 8)
     private Gender gender;
@@ -95,6 +98,14 @@ public class User {
 
     public void setBlocked(boolean blocked) {
         this.blocked = blocked;
+    }
+
+    public String getBlockComment() {
+        return blockComment;
+    }
+
+    public void setBlockComment(String blockComment) {
+        this.blockComment = blockComment;
     }
 
     public Gender getGender() {

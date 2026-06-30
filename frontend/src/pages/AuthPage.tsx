@@ -24,6 +24,8 @@ export default function AuthPage() {
   const [usernameHint, setUsernameHint] = useState('');
   const [usernameStatus, setUsernameStatus] = useState<'idle' | 'checking' | 'available' | 'taken'>('idle');
   const [loading, setLoading] = useState(false);
+  const [loginStep, setLoginStep] = useState<'credentials' | 'blockedKey' | 'blockedInfo'>('credentials');
+  const [blockedInfo, setBlockedInfo] = useState<{ title: string; message: string | null } | null>(null);
   const { captcha, refresh, error: captchaError } = useCaptcha();
   const { login, isAuthenticated } = useAuth();
   const navigate = useNavigate();
@@ -98,6 +100,14 @@ export default function AuthPage() {
     return null;
   }
 
+  function backFromBlockedKey() {
+    setLoginStep('credentials');
+    setRecoveryKey('');
+    setCaptchaAnswer('');
+    setError('');
+    refresh();
+  }
+
   function switchMode(next: 'login' | 'register' | 'recover') {
     setMode(next);
     setError('');
@@ -108,6 +118,8 @@ export default function AuthPage() {
     setRecoveryKeyConfirm('');
     setNewPasswordConfirm('');
     setCaptchaAnswer('');
+    setLoginStep('credentials');
+    setBlockedInfo(null);
     refresh();
   }
 
@@ -177,6 +189,16 @@ export default function AuthPage() {
       setError('Подождите загрузки капчи');
       return;
     }
+    if (mode === 'login' && loginStep === 'blockedInfo') {
+      return;
+    }
+    if (mode === 'login' && loginStep === 'blockedKey') {
+      const recoveryFormatError = validateRecoveryKeyFormat(recoveryKey);
+      if (recoveryFormatError) {
+        setError(recoveryFormatError);
+        return;
+      }
+    }
     setLoading(true);
     try {
       const payload = {
@@ -185,25 +207,53 @@ export default function AuthPage() {
         captchaId: captcha.captchaId,
         captchaAnswer,
       };
+      if (mode === 'login' && loginStep === 'blockedKey') {
+        const reveal = await api.revealBlockedAccount({
+          ...payload,
+          recoveryKey,
+        });
+        setBlockedInfo({ title: reveal.title, message: reveal.message });
+        setLoginStep('blockedInfo');
+        setError('');
+        refresh();
+        setCaptchaAnswer('');
+        return;
+      }
+      if (mode === 'login') {
+        const res = await api.login({ ...payload, rememberMe });
+        if (res.status === 'BLOCKED_KEY_REQUIRED') {
+          setLoginStep('blockedKey');
+          setRecoveryKey('');
+          setError('');
+          refresh();
+          setCaptchaAnswer('');
+          return;
+        }
+        if (!res.token || !res.username) {
+          setError('Не удалось войти');
+          return;
+        }
+        login(res.token, res.username, res.admin ?? false, undefined, rememberMe);
+        navigate('/app');
+        return;
+      }
       const res =
-        mode === 'login'
-          ? await api.login({ ...payload, rememberMe })
-          : mode === 'recover'
-            ? await api.recoverPassword({
-                username: loginName,
-                recoveryKey,
-                newPassword: password,
-                captchaId: captcha.captchaId,
-                captchaAnswer,
-                rememberMe,
-              })
-            : await api.register({ ...payload, recoveryKey, termsAccepted, gender });
+        mode === 'recover'
+          ? await api.recoverPassword({
+              username: loginName,
+              recoveryKey,
+              newPassword: password,
+              captchaId: captcha.captchaId,
+              captchaAnswer,
+              rememberMe,
+            })
+          : await api.register({ ...payload, recoveryKey, termsAccepted, gender });
       login(
         res.token,
         res.username,
         res.admin,
         mode === 'register' ? gender : undefined,
-        mode === 'login' || mode === 'recover' ? rememberMe : true,
+        mode === 'recover' ? rememberMe : true,
       );
       navigate('/app');
     } catch (err) {
@@ -225,6 +275,21 @@ export default function AuthPage() {
       </div>
 
       <div className="card">
+        {mode === 'login' && loginStep === 'blockedInfo' && blockedInfo ? (
+          <div className="auth-blocked-info">
+            <h2 className="auth-blocked-title">{blockedInfo.title}</h2>
+            {blockedInfo.message && <p className="auth-blocked-message">{blockedInfo.message}</p>}
+            <button
+              type="button"
+              className="btn btn-primary"
+              style={{ width: '100%' }}
+              onClick={() => switchMode('login')}
+            >
+              Понятно
+            </button>
+          </div>
+        ) : (
+          <>
         {mode === 'recover' ? (
           <div className="auth-recover-head">
             <h2 className="auth-recover-title">Восстановление доступа</h2>
@@ -236,7 +301,7 @@ export default function AuthPage() {
           <div className="tabs">
             <button
               type="button"
-              className={`tab ${mode === 'login' ? 'active' : ''}`}
+              className={`tab ${mode === 'login' && loginStep === 'credentials' ? 'active' : ''}`}
               onClick={() => switchMode('login')}
             >
               Вход
@@ -245,13 +310,30 @@ export default function AuthPage() {
               type="button"
               className={`tab ${mode === 'register' ? 'active' : ''}`}
               onClick={() => switchMode('register')}
+              disabled={loginStep === 'blockedKey'}
             >
               Регистрация
             </button>
           </div>
         )}
 
+        {mode === 'login' && loginStep === 'blockedKey' && (
+          <div className="auth-blocked-key-head">
+            <div className="auth-recover-head">
+              <h2 className="auth-recover-title">Ключевая фраза</h2>
+              <button type="button" className="btn btn-ghost auth-back-link" onClick={backFromBlockedKey}>
+                ← Назад
+              </button>
+            </div>
+          </div>
+        )}
+
         <form onSubmit={handleSubmit} noValidate>
+          {mode === 'login' && loginStep === 'blockedKey' ? (
+            <p className="field-hint" style={{ marginBottom: 12 }}>
+              Логин: <strong>{username}</strong>
+            </p>
+          ) : (
           <div className="field">
             <label>Логин</label>
             <input
@@ -277,6 +359,8 @@ export default function AuthPage() {
               <p className="field-warning">Такой логин уже занят</p>
             )}
           </div>
+          )}
+
           {mode === 'recover' && (
             <div className="field">
               <label>Ключевая фраза</label>
@@ -293,6 +377,21 @@ export default function AuthPage() {
             </div>
           )}
 
+          {mode === 'login' && loginStep === 'blockedKey' && (
+            <div className="field">
+              <label>Ключевая фраза</label>
+              <input
+                type="password"
+                value={recoveryKey}
+                onChange={(e) => setRecoveryKey(e.target.value)}
+                autoComplete="off"
+                maxLength={128}
+              />
+              <span className="field-hint">Та же фраза, что при регистрации</span>
+            </div>
+          )}
+
+          {!(mode === 'login' && loginStep === 'blockedKey') && (
           <div className="field">
             <label>{mode === 'recover' ? 'Новый пароль' : 'Пароль'}</label>
             <input
@@ -306,7 +405,7 @@ export default function AuthPage() {
                 ? 'Пароль от вашей учётной записи'
                 : 'Не короче 6 символов и не совпадает с логином'}
             </span>
-            {mode === 'login' && (
+            {mode === 'login' && loginStep === 'credentials' && (
               <button
                 type="button"
                 className="auth-forgot-link"
@@ -316,6 +415,7 @@ export default function AuthPage() {
               </button>
             )}
           </div>
+          )}
 
           {mode === 'recover' && (
             <div className="field">
@@ -329,7 +429,7 @@ export default function AuthPage() {
             </div>
           )}
 
-          {mode === 'login' || mode === 'recover' ? (
+          {(mode === 'login' && loginStep === 'credentials') || mode === 'recover' ? (
             <label className="checkbox-row">
               <input
                 type="checkbox"
@@ -426,13 +526,17 @@ export default function AuthPage() {
           <button type="submit" className="btn btn-primary" style={{ width: '100%' }} disabled={loading}>
             {loading
               ? 'Загрузка…'
-              : mode === 'login'
-                ? 'Войти'
-                : mode === 'recover'
-                  ? 'Сменить пароль и войти'
-                  : 'Зарегистрироваться'}
+              : mode === 'login' && loginStep === 'blockedKey'
+                ? 'Продолжить'
+                : mode === 'login'
+                  ? 'Войти'
+                  : mode === 'recover'
+                    ? 'Сменить пароль и войти'
+                    : 'Зарегистрироваться'}
           </button>
         </form>
+          </>
+        )}
       </div>
     </div>
   );

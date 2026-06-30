@@ -1,7 +1,10 @@
 package com.thegreathike.auth.service;
 
 import com.thegreathike.auth.dto.AuthResponse;
+import com.thegreathike.auth.dto.BlockedRevealRequest;
+import com.thegreathike.auth.dto.BlockedRevealResponse;
 import com.thegreathike.auth.dto.LoginRequest;
+import com.thegreathike.auth.dto.LoginResponse;
 import com.thegreathike.auth.dto.RecoverPasswordRequest;
 import com.thegreathike.auth.dto.RegisterRequest;
 import com.thegreathike.auth.entity.Gender;
@@ -69,7 +72,7 @@ public class AuthService {
     }
 
     @Transactional
-    public AuthResponse login(LoginRequest request, HttpServletRequest httpRequest) {
+    public LoginResponse login(LoginRequest request, HttpServletRequest httpRequest) {
         String ip = ClientIp.resolve(httpRequest);
         loginAttemptLimiter.checkAllowed(request.username(), ip);
         captchaService.validate(request.captchaId(), request.captchaAnswer());
@@ -86,7 +89,8 @@ public class AuthService {
         }
 
         if (user.isBlocked()) {
-            throw new IllegalArgumentException("Учётная запись заблокирована");
+            loginAttemptLimiter.recordSuccess(request.username(), ip);
+            return LoginResponse.blockedKeyRequired();
         }
 
         loginAttemptLimiter.recordSuccess(request.username(), ip);
@@ -94,7 +98,38 @@ public class AuthService {
                 ? jwtService.rememberExpirationMs()
                 : jwtService.defaultExpirationMs();
         String token = jwtService.generateToken(user.getId(), user.getUsername(), user.isAdmin(), ttl);
-        return new AuthResponse(token, user.getUsername(), user.isAdmin());
+        return LoginResponse.success(token, user.getUsername(), user.isAdmin());
+    }
+
+    @Transactional(readOnly = true)
+    public BlockedRevealResponse revealBlockedAccount(BlockedRevealRequest request, HttpServletRequest httpRequest) {
+        String ip = ClientIp.resolve(httpRequest);
+        String limitKey = "blocked:" + request.username();
+        loginAttemptLimiter.checkAllowed(limitKey, ip);
+        captchaService.validate(request.captchaId(), request.captchaAnswer());
+
+        User user = userRepository.findByUsername(request.username()).orElse(null);
+        boolean valid = user != null
+                && user.isBlocked()
+                && passwordEncoder.matches(request.password(), user.getPasswordHash())
+                && user.getRecoveryKeyHash() != null
+                && !user.getRecoveryKeyHash().isBlank()
+                && passwordEncoder.matches(request.recoveryKey(), user.getRecoveryKeyHash());
+
+        if (!valid) {
+            loginAttemptLimiter.recordFailure(limitKey, ip);
+            throw new IllegalArgumentException("Неверная ключевая фраза");
+        }
+
+        loginAttemptLimiter.recordSuccess(limitKey, ip);
+        String teamMessage = user.getBlockComment();
+        if (teamMessage != null) {
+            teamMessage = teamMessage.trim();
+        }
+        if (teamMessage == null || teamMessage.isBlank()) {
+            teamMessage = null;
+        }
+        return new BlockedRevealResponse("Аккаунт заблокирован", teamMessage);
     }
 
     @Transactional

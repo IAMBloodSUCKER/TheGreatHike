@@ -29,7 +29,7 @@ services:
       - -ec
       - |
         export PGPASSWORD="$${POSTGRES_PASSWORD:-thegreathike}"
-        for f in migrate-v2.sql migrate-captcha.sql migrate-recovery-key.sql migrate-v3.sql; do
+        for f in migrate-v2.sql migrate-captcha.sql migrate-recovery-key.sql migrate-v3.sql migrate-v4.sql; do
           echo "Applying $$f..."
           psql -h postgres -U thegreathike -d thegreathike -v ON_ERROR_STOP=1 -f "/migrations/$$f"
         done

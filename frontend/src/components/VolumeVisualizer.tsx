@@ -11,6 +11,7 @@ import {
   unitFootprintPx,
 } from '../objectDimensions';
 import { BookStackVisual, BundleStackVisual, clusterSpreadWidthPx, SideClusterVisual } from './StackVisuals';
+import { wholeAndRemainder } from '../packLayout';
 import { formatGrams } from '../utils';
 import HumanFigure, { humanGenderLabel } from './HumanFigure';
 import { useAuth } from '../hooks/useAuth';
@@ -132,7 +133,7 @@ function layoutClusterPositions(
 }
 
 function shouldUseNeatStack(count: number, dims: ObjectDimensions): boolean {
-  if (dims.visualLayout === 'books' || dims.visualLayout === 'bundle' || dims.visualLayout === 'cluster') {
+  if (dims.visualLayout === 'books' || dims.visualLayout === 'bundle' || dims.visualLayout === 'packs' || dims.visualLayout === 'cluster') {
     return false;
   }
   if (count < NEAT_STACK_MIN_COUNT) {
@@ -142,16 +143,6 @@ function shouldUseNeatStack(count: number, dims: ObjectDimensions): boolean {
   return stepPx < MIN_LAYER_PX || count > 20;
 }
 
-function pieWedgePath(cx: number, cy: number, radius: number, fraction: number): string {
-  if (fraction >= 0.999) {
-    return '';
-  }
-  const angle = Math.min(1, Math.max(0, fraction)) * Math.PI * 2;
-  const x = cx + radius * Math.sin(angle);
-  const y = cy - radius * Math.cos(angle);
-  const largeArc = fraction > 0.5 ? 1 : 0;
-  return `M ${cx} ${cy} L ${cx} ${cy - radius} A ${radius} ${radius} 0 ${largeArc} 1 ${x} ${y} Z`;
-}
 
 function stackHeightPx(count: number, dims: ObjectDimensions, unitH: number): number {
   if (count < 1) {
@@ -249,22 +240,10 @@ function NeatStack({
           strokeWidth="0.45"
         />
       ))}
-      {partial > 0.05 && (
-        <line
-          x1={left}
-          y1={top}
-          x2={left + drawWidth}
-          y2={top}
-          stroke="var(--accent)"
-          strokeWidth="0.8"
-          strokeDasharray="2 2"
-          opacity="0.85"
-        />
-      )}
       {emoji && (
         <text
           x={cx}
-          y={top + Math.min(stepPx, totalH) * 0.55}
+          y={groundY - Math.min(stepPx, totalH) * 0.35}
           textAnchor="middle"
           dominantBaseline="middle"
           fontSize={emojiSize}
@@ -326,97 +305,37 @@ function SingleObjectUnit({
   cx,
   bottom,
   dims,
-  fraction,
   emoji,
-  clipId,
   showEmoji,
   stackIndex,
 }: {
   cx: number;
   bottom: number;
   dims: ObjectDimensions;
-  fraction: number;
   emoji?: string;
-  clipId: string;
   showEmoji: boolean;
   stackIndex: number;
 }) {
-  const showFraction = fraction < 0.999;
-  const f = Math.min(1, Math.max(0.02, fraction));
   const { widthPx: fullWidthPx, heightPx } = unitSizePx(dims);
-  let widthPx = fullWidthPx;
-
-  if (showFraction && (dims.shape === 'flat' || dims.shape === 'box' || dims.shape === 'cylinder')) {
-    widthPx *= f;
-  }
-
   const top = bottom - heightPx;
-  const left = cx - widthPx / 2;
   const centerY = top + heightPx / 2;
   const emojiSize = Math.max(12, Math.min(fullWidthPx, heightPx) * 0.92);
   const depth = stackIndex * 0.012;
 
   if (showEmoji && emoji) {
-    if (!showFraction) {
-      return (
-        <g>
-          <text
-            x={cx}
-            y={centerY + 1}
-            textAnchor="middle"
-            dominantBaseline="middle"
-            fontSize={emojiSize}
-            className="volume-item-emoji"
-          >
-            {safeEmoji(emoji)}
-          </text>
-        </g>
-      );
-    }
-
-    const cutLine =
-      dims.shape !== 'disc' ? (
-        <line
-          x1={left + widthPx}
-          y1={top - 1}
-          x2={left + widthPx}
-          y2={bottom + 1}
-          stroke="var(--accent)"
-          strokeWidth="0.8"
-          strokeDasharray="2 2"
-          opacity="0.85"
-        />
-      ) : null;
-
     return (
       <g>
-        {dims.shape !== 'disc' && (
-          <defs>
-            <clipPath id={clipId}>
-              <rect x={left - 1} y={top - 1} width={widthPx + 2} height={heightPx + 2} />
-            </clipPath>
-          </defs>
-        )}
-        <g clipPath={dims.shape !== 'disc' ? `url(#${clipId})` : undefined}>
-          {dims.shape === 'disc' && (
-            <path
-              d={pieWedgePath(cx, centerY, Math.min(fullWidthPx, heightPx) / 2, f)}
-              fill="rgba(255,255,255,0.06)"
-            />
-          )}
-          <text
-            x={cx}
-            y={centerY + 1}
-            textAnchor="middle"
-            dominantBaseline="middle"
-            fontSize={emojiSize}
-            className="volume-item-emoji"
-            opacity={0.35 + f * 0.65}
-          >
-            {safeEmoji(emoji)}
-          </text>
-        </g>
-        {cutLine}
+        <ellipse cx={cx} cy={bottom + 3} rx={fullWidthPx * 0.35} ry={heightPx * 0.06} fill="#000" opacity="0.1" />
+        <text
+          x={cx}
+          y={centerY + 1}
+          textAnchor="middle"
+          dominantBaseline="middle"
+          fontSize={emojiSize}
+          className="volume-item-emoji"
+        >
+          {safeEmoji(emoji)}
+        </text>
       </g>
     );
   }
@@ -447,55 +366,10 @@ function SingleObjectUnit({
       />
     );
 
-  const wedge =
-    showFraction && dims.shape === 'disc' ? (
-      <>
-        <ellipse
-          cx={cx}
-          cy={centerY}
-          rx={fullWidthPx / 2}
-          ry={heightPx / 2}
-          fill="none"
-          stroke="rgba(255,255,255,0.12)"
-          strokeWidth="0.6"
-          strokeDasharray="2 2"
-        />
-        <path
-          d={pieWedgePath(cx, centerY, Math.min(fullWidthPx, heightPx) / 2, f)}
-          fill="rgba(255,255,255,0.12)"
-          stroke="rgba(255,255,255,0.22)"
-          strokeWidth="0.6"
-        />
-      </>
-    ) : null;
-
-  const cutLine =
-    showFraction && dims.shape !== 'disc' ? (
-      <line
-        x1={left + widthPx}
-        y1={top - 1}
-        x2={left + widthPx}
-        y2={bottom + 1}
-        stroke="var(--accent)"
-        strokeWidth="0.8"
-        strokeDasharray="2 2"
-        opacity="0.85"
-      />
-    ) : null;
-
   return (
     <g>
-      {showFraction && dims.shape !== 'disc' && (
-        <defs>
-          <clipPath id={clipId}>
-            <rect x={left - 1} y={top - 1} width={widthPx + 2} height={heightPx + 2} />
-          </clipPath>
-        </defs>
-      )}
-      <g clipPath={showFraction && dims.shape !== 'disc' ? `url(#${clipId})` : undefined}>
-        {wedge ?? body}
-      </g>
-      {cutLine}
+      <ellipse cx={cx} cy={bottom + 3} rx={fullWidthPx * 0.35} ry={heightPx * 0.06} fill="#000" opacity="0.1" />
+      {body}
     </g>
   );
 }
@@ -536,7 +410,7 @@ function ObjectCluster({
     );
   }
 
-  if (dims.visualLayout === 'bundle') {
+  if (dims.visualLayout === 'bundle' || dims.visualLayout === 'packs') {
     const { widthPx: bundleW } = unitSizePx(dims);
     const spreadW = Math.max(bundleW, dims.bundleWidthMm ? mmToPx(dims.bundleWidthMm) : bundleW, 22);
     return (
@@ -572,15 +446,13 @@ function ObjectCluster({
           count={count}
           dims={dims}
           emoji={emoji}
-          renderUnit={({ cx: unitCx, bottom, fraction, stackIndex, clipId }) => (
+          renderUnit={({ cx: unitCx, bottom, stackIndex, clipId }) => (
             <SingleObjectUnit
               key={clipId}
               cx={unitCx}
               bottom={bottom}
               dims={dims}
-              fraction={fraction}
               emoji={emoji}
-              clipId={`${clipIdPrefix}-${clipId}`}
               showEmoji
               stackIndex={stackIndex}
             />
@@ -590,40 +462,19 @@ function ObjectCluster({
     );
   }
 
-  if (count < 0.999) {
+  const wholeCount = Math.max(0, Math.floor(count + 0.001));
+  if (wholeCount <= 0) {
     return (
       <g clipPath={`url(#${regionClipId})`}>
-        <ellipse
-          cx={cx}
-          cy={groundY + 4}
-          rx={Math.max(widthPx, heightPx) * 0.35}
-          ry={Math.max(widthPx, heightPx) * 0.08}
-          fill="#000"
-          opacity="0.1"
-        />
-        <SingleObjectUnit
-          cx={cx}
-          bottom={groundY}
-          dims={dims}
-          fraction={count}
-          emoji={emoji}
-          clipId={`${clipIdPrefix}-frac`}
-          showEmoji
-          stackIndex={0}
-        />
+        <VisitMassBlob cx={cx} grams={Math.round(count * (dims.sizeMm || 200))} colorHex="#8b6914" groundY={groundY} />
       </g>
     );
   }
 
-  const fullCount = Math.floor(count + 0.001);
-  const partial = count - fullCount;
-  const overflow = fullCount > MAX_DRAW_ITEMS;
-  const drawFull = overflow ? MAX_DRAW_ITEMS : fullCount;
-  const drawPartial = !overflow && partial > 0.05;
-  const totalDraw = drawFull + (drawPartial ? 1 : 0);
-  const displayCount = overflow ? drawFull : count;
-  const useNeat = shouldUseNeatStack(displayCount, dims);
-  const topItemIndex = totalDraw - 1;
+  const overflow = wholeCount > MAX_DRAW_ITEMS;
+  const drawFull = overflow ? MAX_DRAW_ITEMS : wholeCount;
+  const useNeat = shouldUseNeatStack(wholeCount, dims);
+  const topItemIndex = drawFull - 1;
   const clusterW = widthPx;
 
   return (
@@ -640,42 +491,26 @@ function ObjectCluster({
         <NeatStack
           cx={cx}
           groundY={groundY}
-          count={displayCount}
+          count={wholeCount}
           dims={dims}
           widthPx={widthPx}
           heightPx={heightPx}
           emoji={emoji}
         />
       ) : (
-        <>
-          {layoutClusterPositions(totalDraw, dims, cx, groundY)
-            .slice(0, drawFull)
-            .map((pos, i) => (
-              <SingleObjectUnit
-                key={`u-${i}`}
-                cx={pos.cx}
-                bottom={pos.bottom}
-                dims={dims}
-                fraction={1}
-                emoji={emoji}
-                clipId={`${clipIdPrefix}-${i}`}
-                showEmoji={totalDraw <= 8 || i === topItemIndex}
-                stackIndex={pos.stackIndex}
-              />
-            ))}
-          {drawPartial && (
+        layoutClusterPositions(drawFull, dims, cx, groundY)
+          .slice(0, drawFull)
+          .map((pos, i) => (
             <SingleObjectUnit
-              cx={cx}
-              bottom={groundY - drawFull * mmToPx(dims.stackStepMm)}
+              key={`u-${i}`}
+              cx={pos.cx}
+              bottom={pos.bottom}
               dims={dims}
-              fraction={partial}
               emoji={emoji}
-              clipId={`${clipIdPrefix}-partial`}
-              showEmoji={totalDraw <= 8}
-              stackIndex={drawFull}
+              showEmoji={drawFull <= 8 || i === topItemIndex}
+              stackIndex={pos.stackIndex}
             />
-          )}
-        </>
+          ))
       )}
       {overflow && (
         <text
@@ -685,7 +520,7 @@ function ObjectCluster({
           fill="#9aa8b8"
           fontSize="9"
         >
-          +{formatCount(fullCount - MAX_DRAW_ITEMS)} ещё
+          +{formatCount(wholeCount - MAX_DRAW_ITEMS)} ещё
         </text>
       )}
     </g>
@@ -743,13 +578,23 @@ function CompareScene({
         selectedItem.gramsPerUnit,
       );
       const count = selectedItem.count;
-      const leftStackH = stackDisplayHeightPx(count, dims, mmToPx);
-      const leftLabel = `${formatCount(count)} шт · ~${formatGrams(selectedItem.gramsPerUnit)} каждая`;
+      const { whole, remainderGrams } = wholeAndRemainder(count, selectedItem.gramsPerUnit);
+      const leftStackH = stackDisplayHeightPx(
+        dims.visualLayout === 'cluster' ? whole : count,
+        dims,
+        mmToPx,
+      );
+      let leftLabel = `${formatCount(count)} шт · ~${formatGrams(selectedItem.gramsPerUnit)} каждая`;
+      if (dims.visualLayout === 'cluster' && remainderGrams > 0 && whole > 0) {
+        leftLabel = `${whole} шт + ~${formatGrams(remainderGrams)}`;
+      } else if (remainderGrams > 0 && whole > 0 && dims.visualLayout === 'packs') {
+        leftLabel = `${formatCount(count)} шт (пачками)`;
+      }
       const layoutLabel =
         dims.visualLayout === 'cluster'
           ? 'ряд'
-          : dims.visualLayout === 'bundle'
-            ? 'связки'
+          : dims.visualLayout === 'bundle' || dims.visualLayout === 'packs'
+            ? 'пачки'
             : dims.visualLayout === 'books' || dims.stackMode === 'pile'
               ? 'стопка'
               : 'стопка';
@@ -757,8 +602,8 @@ function CompareScene({
         count >= 1
           ? dims.visualLayout === 'cluster'
             ? `${periodLabel} — предметы слева в масштабе`
-            : dims.visualLayout === 'bundle'
-              ? `${periodLabel} — связки слева в масштабе`
+            : dims.visualLayout === 'bundle' || dims.visualLayout === 'packs'
+              ? `${periodLabel} — пачки на полу`
               : `${periodLabel} — ${layoutLabel} слева в масштабе`
           : `${periodLabel} — доля одной штуки`;
       return {

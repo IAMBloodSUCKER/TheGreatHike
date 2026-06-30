@@ -7,6 +7,7 @@
     "dev": "vite",
     "build": "vite build",
     "make-logo": "node scripts/make-logo.mjs",
+    "readme-screenshots": "node scripts/prepare-readme-screenshots.mjs",
     "preview": "vite preview"
   },
   "dependencies": {

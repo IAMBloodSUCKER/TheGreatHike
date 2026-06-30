@@ -1,0 +1,25 @@
+# Git & IDE
+.git
+.gitignore
+.idea
+.cursor
+.vscode
+
+# Frontend — ставится в контейнере через npm install
+frontend/node_modules
+frontend/dist
+frontend/.vite
+
+# Java — собирается в контейнере
+**/target
+**/*.jar
+
+# Локальные данные
+postgres-data
+.env
+.env.local
+*.log
+
+# Документация и ассеты Cursor (не нужны в образе)
+docs/screenshots
+assets

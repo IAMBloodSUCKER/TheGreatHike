@@ -14,6 +14,7 @@ import org.springframework.http.MediaType;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
 
+import java.nio.charset.StandardCharsets;
 import java.time.Instant;
 import java.util.List;
 import java.util.UUID;
@@ -78,10 +79,19 @@ public class TrackingController {
         Instant fromTs = from != null ? from : Instant.now().minusSeconds(86400L * 365);
         Instant toTs = to != null ? to : Instant.now().plusSeconds(60);
         String csv = visitService.exportCsv(userId, fromTs, toTs);
-        byte[] body = csv.getBytes(java.nio.charset.StandardCharsets.UTF_8);
+        byte[] body = utf16LeWithBom(csv);
         return ResponseEntity.ok()
                 .header(HttpHeaders.CONTENT_DISPOSITION, "attachment; filename=thegreathike-export.csv")
-                .contentType(MediaType.parseMediaType("text/csv"))
+                .contentType(MediaType.parseMediaType("text/csv; charset=UTF-16LE"))
                 .body(body);
+    }
+
+    private static byte[] utf16LeWithBom(String text) {
+        byte[] data = text.getBytes(StandardCharsets.UTF_16LE);
+        byte[] body = new byte[2 + data.length];
+        body[0] = (byte) 0xFF;
+        body[1] = (byte) 0xFE;
+        System.arraycopy(data, 0, body, 2, data.length);
+        return body;
     }
 }

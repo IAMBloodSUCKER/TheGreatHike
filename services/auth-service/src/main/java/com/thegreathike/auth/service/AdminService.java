@@ -63,9 +63,11 @@ public class AdminService {
     }
 
     @Transactional
-    public AdminUserResponse blockUser(UUID userId, UUID actorId) {
+    public AdminUserResponse blockUser(UUID userId, UUID actorId, String comment) {
         User user = requireManageableUser(userId, actorId);
         user.setBlocked(true);
+        String trimmed = comment == null ? null : comment.trim();
+        user.setBlockComment(trimmed == null || trimmed.isEmpty() ? null : trimmed);
         return toUserResponse(user);
     }
 
@@ -73,6 +75,7 @@ public class AdminService {
     public AdminUserResponse unblockUser(UUID userId, UUID actorId) {
         User user = requireManageableUser(userId, actorId);
         user.setBlocked(false);
+        user.setBlockComment(null);
         return toUserResponse(user);
     }
 
@@ -105,6 +108,7 @@ public class AdminService {
                 user.getGender() != null ? user.getGender() : Gender.MALE,
                 user.isAdmin(),
                 user.isBlocked(),
+                user.getBlockComment(),
                 feedbackCount,
                 unreplied
         );

@@ -36,6 +36,8 @@ export default function AdminPage() {
   const [savingId, setSavingId] = useState<string | null>(null);
   const [userActionLoading, setUserActionLoading] = useState(false);
   const [deleteTarget, setDeleteTarget] = useState<AdminUser | null>(null);
+  const [blockTarget, setBlockTarget] = useState<AdminUser | null>(null);
+  const [blockComment, setBlockComment] = useState('');
 
   const visitByUser = useMemo(() => {
     const map = new Map<string, UserVisitStats>();
@@ -160,13 +162,33 @@ export default function AdminPage() {
 
   async function toggleBlock(user: AdminUser) {
     if (!adminSession || user.admin) return;
+    if (user.blocked) {
+      setUserActionLoading(true);
+      setError('');
+      try {
+        const updated = await api.unblockAdminUser(user.id, adminSession);
+        setUsers((prev) => prev.map((u) => (u.id === updated.id ? updated : u)));
+      } catch (err) {
+        handleSessionLost(err);
+        setError(err instanceof Error ? err.message : 'Ошибка');
+      } finally {
+        setUserActionLoading(false);
+      }
+      return;
+    }
+    setBlockComment('');
+    setBlockTarget(user);
+  }
+
+  async function confirmBlockUser() {
+    if (!adminSession || !blockTarget) return;
     setUserActionLoading(true);
     setError('');
     try {
-      const updated = user.blocked
-        ? await api.unblockAdminUser(user.id, adminSession)
-        : await api.blockAdminUser(user.id, adminSession);
+      const updated = await api.blockAdminUser(blockTarget.id, adminSession, blockComment);
       setUsers((prev) => prev.map((u) => (u.id === updated.id ? updated : u)));
+      setBlockTarget(null);
+      setBlockComment('');
     } catch (err) {
       handleSessionLost(err);
       setError(err instanceof Error ? err.message : 'Ошибка');
@@ -392,6 +414,13 @@ export default function AdminPage() {
                   )}
                 </div>
 
+                {!selectedUser.admin && selectedUser.blocked && selectedUser.blockComment && (
+                  <div className="admin-block-comment">
+                    <span className="admin-block-comment-label">Комментарий</span>
+                    <p>{selectedUser.blockComment}</p>
+                  </div>
+                )}
+
                 {!selectedUser.admin && (
                   <form className="admin-direct-form" onSubmit={handleDirectMessage}>
                     <label className="field">
@@ -461,6 +490,32 @@ export default function AdminPage() {
           </div>
         </div>
       )}
+
+      <ConfirmDialog
+        open={!!blockTarget}
+        title={`Заблокировать «${blockTarget?.username ?? ''}»?`}
+        message={
+          <label className="field">
+            <span>Комментарий</span>
+            <textarea
+              value={blockComment}
+              onChange={(e) => setBlockComment(e.target.value)}
+              rows={4}
+              maxLength={2000}
+              placeholder="Необязательно"
+            />
+          </label>
+        }
+        confirmLabel="Заблокировать"
+        destructive
+        loading={userActionLoading}
+        loadingLabel="Блокировка…"
+        onConfirm={confirmBlockUser}
+        onCancel={() => {
+          setBlockTarget(null);
+          setBlockComment('');
+        }}
+      />
 
       <ConfirmDialog
         open={!!deleteTarget}

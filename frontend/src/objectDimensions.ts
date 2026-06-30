@@ -2,9 +2,13 @@
 
 export type ObjectShape = 'box' | 'flat' | 'disc' | 'cylinder' | 'soft' | 'generic';
 export type StackMode = 'stack' | 'pile';
-/** stack — слои; cluster — рядом; books — стопка книг; bundle — связки/пачки */
-export type VisualLayout = 'stack' | 'cluster' | 'books' | 'bundle';
-export type BundleKind = 'keys' | 'pens' | 'pencils' | 'coins' | 'matches' | 'clips';
+/** stack — слои; cluster — рядом; books — стопка книг; bundle/packs — связки на полу */
+export type VisualLayout = 'stack' | 'cluster' | 'books' | 'bundle' | 'packs';
+import type { PackKind } from './packLayout';
+import { decomposeIntoPacks, layoutPacksOnGround, PACK_PROFILES } from './packLayout';
+
+export type { PackKind };
+export type BundleKind = PackKind;
 
 export interface ObjectDimensions {
   /** Высота одного слоя в стопке (мм) */
@@ -20,8 +24,10 @@ export interface ObjectDimensions {
   visualLayout?: VisualLayout;
   /** Сколько фигурок рисуем максимум (книги — 10, самокаты — 5) */
   maxVisualLayers?: number;
-  bundleKind?: BundleKind;
-  /** Сколько штук в одной связке/пачке */
+  bundleKind?: PackKind;
+  /** Размеры пачек для микса (крупные первыми) */
+  packSizes?: number[];
+  /** @deprecated используй packSizes */
   unitsPerBundle?: number;
   /** Габарит связки для отрисовки (мм) */
   bundleHeightMm?: number;
@@ -40,14 +46,15 @@ type Rule = {
   stackStepMm?: number;
   visualLayout?: VisualLayout;
   maxVisualLayers?: number;
-  bundleKind?: BundleKind;
+  bundleKind?: PackKind;
+  packSizes?: number[];
   unitsPerBundle?: number;
   bundleHeightMm?: number;
   bundleWidthMm?: number;
 };
 
 const BUNDLE_RULE = {
-  visualLayout: 'bundle' as const,
+  visualLayout: 'packs' as const,
   maxVisualLayers: 10,
 };
 
@@ -71,11 +78,11 @@ const RULES: Rule[] = [
   { pattern: /собак/, sizeMm: 550, widthMm: 220, shape: 'soft', stackStepMm: 550 },
   { pattern: /хомяк/, sizeMm: 80, widthMm: 45, shape: 'disc', stackStepMm: 75 },
   { pattern: /курин|куриц/, sizeMm: 380, widthMm: 140, shape: 'soft', stackStepMm: 380 },
-  { pattern: /спич/, sizeMm: 50, widthMm: 35, shape: 'box', aspect: 1.35, stackStepMm: 12, bundleKind: 'matches', unitsPerBundle: 10, bundleHeightMm: 52, bundleWidthMm: 38, ...BUNDLE_RULE },
+  { pattern: /спич/, sizeMm: 50, widthMm: 35, shape: 'box', aspect: 1.35, stackStepMm: 12, bundleKind: 'matches', packSizes: PACK_PROFILES.matches.sizes, ...BUNDLE_RULE },
   { pattern: /банкнот/, sizeMm: 0.12, shape: 'flat', aspect: 2.18, stackStepMm: 0.12 },
   { pattern: /банковск.*карт|кредитн.*карт/, sizeMm: 0.8, shape: 'flat', aspect: 1.58, stackStepMm: 0.8 },
-  { pattern: /монет/, sizeMm: 20.5, shape: 'disc', stackMode: 'pile', stackStepMm: 2.2, bundleKind: 'coins', unitsPerBundle: 25, bundleHeightMm: 28, bundleWidthMm: 28, ...BUNDLE_RULE },
-  { pattern: /скрепк/, sizeMm: 1, shape: 'flat', aspect: 3.5, stackStepMm: 1.2, bundleKind: 'clips', unitsPerBundle: 50, bundleHeightMm: 22, bundleWidthMm: 28, ...BUNDLE_RULE },
+  { pattern: /монет/, sizeMm: 20.5, shape: 'disc', stackMode: 'pile', stackStepMm: 2.2, bundleKind: 'coins', packSizes: PACK_PROFILES.coins.sizes, ...BUNDLE_RULE },
+  { pattern: /скрепк/, sizeMm: 1, shape: 'flat', aspect: 3.5, stackStepMm: 1.2, bundleKind: 'clips', packSizes: PACK_PROFILES.clips.sizes, ...BUNDLE_RULE },
   {
     pattern: /карандаш/,
     sizeMm: 175,
@@ -83,11 +90,11 @@ const RULES: Rule[] = [
     shape: 'cylinder',
     stackStepMm: 10,
     bundleKind: 'pencils',
-    unitsPerBundle: 12,
+    packSizes: PACK_PROFILES.pencils.sizes,
     bundleHeightMm: 178,
     bundleWidthMm: 34,
     maxVisualLayers: 8,
-    visualLayout: 'bundle',
+    visualLayout: 'packs',
   },
   {
     pattern: /ручк/,
@@ -96,19 +103,19 @@ const RULES: Rule[] = [
     shape: 'cylinder',
     stackStepMm: 12,
     bundleKind: 'pens',
-    unitsPerBundle: 10,
+    packSizes: PACK_PROFILES.pens.sizes,
     bundleHeightMm: 148,
     bundleWidthMm: 38,
     maxVisualLayers: 8,
-    visualLayout: 'bundle',
+    visualLayout: 'packs',
   },
   { pattern: /ножниц/, sizeMm: 75, widthMm: 14, shape: 'flat', aspect: 6.5, stackStepMm: 14 },
   { pattern: /бритв/, sizeMm: 12, shape: 'flat', aspect: 5.5, stackStepMm: 12 },
   { pattern: /зубн.*щ[её]тк/, sizeMm: 190, widthMm: 18, shape: 'cylinder', stackStepMm: 190 },
   { pattern: /курин.*яйц|яйц/, sizeMm: 57, shape: 'disc', aspect: 0.78, stackStepMm: 52 },
   { pattern: /яблок/, sizeMm: 75, shape: 'disc', aspect: 1, stackStepMm: 68 },
-  { pattern: /носк/, sizeMm: 38, widthMm: 90, shape: 'soft', stackStepMm: 38 },
-  { pattern: /бейсбол|бейсб/, sizeMm: 38, widthMm: 75, shape: 'soft', aspect: 2.0, stackStepMm: 38 },
+  { pattern: /носк/, sizeMm: 38, widthMm: 90, shape: 'soft', stackStepMm: 38, bundleKind: 'socks', packSizes: PACK_PROFILES.socks.sizes, ...BUNDLE_RULE },
+  { pattern: /бейсбол|бейсб/, sizeMm: 38, widthMm: 75, shape: 'soft', aspect: 2.0, stackStepMm: 38, bundleKind: 'discs', packSizes: PACK_PROFILES.discs.sizes, ...BUNDLE_RULE },
   { pattern: /кепк/, sizeMm: 120, widthMm: 220, shape: 'soft', aspect: 220 / 120, stackStepMm: 120 },
   { pattern: /кроссов/, sizeMm: 120, widthMm: 280, shape: 'soft', aspect: 280 / 120, stackStepMm: 120 },
   { pattern: /лягуш/, sizeMm: 80, widthMm: 55, shape: 'disc', aspect: 1.35, stackStepMm: 75 },
@@ -117,9 +124,14 @@ const RULES: Rule[] = [
   { pattern: /кревет/, sizeMm: 85, widthMm: 22, shape: 'disc', aspect: 2.8, stackStepMm: 80 },
   { pattern: /улитк/, sizeMm: 35, widthMm: 24, shape: 'disc', stackStepMm: 32 },
   { pattern: /булк|батон|хлеб/, sizeMm: 55, widthMm: 120, shape: 'soft', stackStepMm: 55 },
-  { pattern: /настольн.*теннис|мячик.*теннис/, sizeMm: 40, shape: 'disc', aspect: 1, stackStepMm: 38 },
-  { pattern: /теннисн.*мяч/, sizeMm: 67, shape: 'disc', stackStepMm: 62 },
-  { pattern: /гольф/, sizeMm: 43, shape: 'disc', stackStepMm: 40 },
+  { pattern: /настольн.*теннис|мячик.*теннис/, sizeMm: 40, shape: 'disc', aspect: 1, stackStepMm: 38, bundleKind: 'discs', packSizes: PACK_PROFILES.discs.sizes, ...BUNDLE_RULE },
+  { pattern: /теннисн.*мяч/, sizeMm: 67, shape: 'disc', stackStepMm: 62, bundleKind: 'balls', packSizes: PACK_PROFILES.balls.sizes, ...BUNDLE_RULE },
+  { pattern: /гольф/, sizeMm: 43, shape: 'disc', stackStepMm: 40, bundleKind: 'discs', packSizes: PACK_PROFILES.discs.sizes, ...BUNDLE_RULE },
+  { pattern: /надут.*футбол|футбольн.*мяч/, sizeMm: 220, shape: 'disc', stackStepMm: 220, bundleKind: 'balls', packSizes: PACK_PROFILES.balls.sizes, ...BUNDLE_RULE },
+  { pattern: /баскетбольн.*мяч/, sizeMm: 240, shape: 'disc', stackStepMm: 240, bundleKind: 'balls', packSizes: [3, 1], ...BUNDLE_RULE },
+  { pattern: /гусениц/, sizeMm: 22, widthMm: 48, shape: 'soft', stackStepMm: 22, bundleKind: 'caterpillars', packSizes: PACK_PROFILES.caterpillars.sizes, ...BUNDLE_RULE },
+  { pattern: /губк/, sizeMm: 70, widthMm: 110, shape: 'soft', stackStepMm: 70, bundleKind: 'sponges', packSizes: PACK_PROFILES.sponges.sizes, ...BUNDLE_RULE },
+  { pattern: /плитк.*шоколад|шоколад.*100/, sizeMm: 18, widthMm: 100, shape: 'flat', aspect: 100 / 18, stackStepMm: 18, bundleKind: 'chocolate', packSizes: PACK_PROFILES.chocolate.sizes, ...BUNDLE_RULE },
   { pattern: /виноградин/, sizeMm: 18, shape: 'disc', stackStepMm: 16 },
   { pattern: /конфет|печень/, sizeMm: 12, shape: 'disc', stackStepMm: 10 },
   { pattern: /арахис|каштан|орех/, sizeMm: 14, shape: 'disc', stackStepMm: 12 },
@@ -132,7 +144,7 @@ const RULES: Rule[] = [
   { pattern: /шестер[её]н/, sizeMm: 18, shape: 'disc', aspect: 1, stackStepMm: 16 },
   { pattern: /пончик/, sizeMm: 32, shape: 'disc', aspect: 1.15, stackStepMm: 30 },
   { pattern: /банан/, sizeMm: 28, widthMm: 180, shape: 'disc', aspect: 6.4, stackStepMm: 26 },
-  { pattern: /апельсин|мандарин/, sizeMm: 62, shape: 'disc', stackStepMm: 58 },
+  { pattern: /апельсин|мандарин/, sizeMm: 62, shape: 'disc', stackStepMm: 58, bundleKind: 'oranges', packSizes: PACK_PROFILES.oranges.sizes, ...BUNDLE_RULE },
   { pattern: /калькулятор/, sizeMm: 145, widthMm: 80, shape: 'box', stackStepMm: 12 },
   { pattern: /мыла/, sizeMm: 65, widthMm: 90, shape: 'box', stackStepMm: 65 },
   { pattern: /туалетн.*бумаг|рулон/, sizeMm: 110, widthMm: 120, shape: 'disc', stackStepMm: 110 },
@@ -163,7 +175,7 @@ const RULES: Rule[] = [
     shape: 'flat',
     stackStepMm: 4,
     bundleKind: 'keys',
-    unitsPerBundle: 8,
+    packSizes: PACK_PROFILES.keys.sizes,
     bundleHeightMm: 72,
     bundleWidthMm: 46,
     ...BUNDLE_RULE,
@@ -199,13 +211,15 @@ function buildDims(
   widthMm?: number,
   visualLayout?: VisualLayout,
   maxVisualLayers?: number,
-  bundleKind?: BundleKind,
+  bundleKind?: PackKind,
+  packSizes?: number[],
   unitsPerBundle?: number,
   bundleHeightMm?: number,
   bundleWidthMm?: number,
 ): ObjectDimensions {
   const stack = deriveStack(shape, sizeMm, stackMode, stackStepMm);
   const w = widthMm ?? sizeMm * aspect;
+  const sizes = packSizes ?? (bundleKind ? PACK_PROFILES[bundleKind]?.sizes : undefined);
   return {
     sizeMm,
     widthMm: w,
@@ -214,6 +228,7 @@ function buildDims(
     visualLayout,
     maxVisualLayers,
     bundleKind,
+    packSizes: sizes,
     unitsPerBundle,
     bundleHeightMm,
     bundleWidthMm,
@@ -245,6 +260,7 @@ export function resolveObjectDimensions(
         rule.visualLayout,
         rule.maxVisualLayers,
         rule.bundleKind,
+        rule.packSizes,
         rule.unitsPerBundle,
         rule.bundleHeightMm,
         rule.bundleWidthMm,
@@ -273,7 +289,7 @@ export function resolveObjectDimensions(
       maxVisualLayers: 10,
       visualLayout: 'bundle',
     },
-    '🧦': { sizeMm: 38, widthMm: 90, shape: 'soft', stackStepMm: 38 },
+    '🧦': { sizeMm: 38, widthMm: 90, shape: 'soft', stackStepMm: 38, bundleKind: 'socks', packSizes: PACK_PROFILES.socks.sizes, visualLayout: 'packs', maxVisualLayers: 10 },
     '🧢': { sizeMm: 120, widthMm: 220, shape: 'soft', stackStepMm: 120 },
     '🐸': { sizeMm: 80, widthMm: 55, shape: 'disc', stackStepMm: 75 },
     '✂️': { sizeMm: 75, widthMm: 14, shape: 'flat', stackStepMm: 14 },
@@ -304,17 +320,18 @@ export function resolveObjectDimensions(
       maxVisualLayers: 8,
       visualLayout: 'bundle',
     },
+    '⚽': { sizeMm: 220, shape: 'disc', stackStepMm: 220, bundleKind: 'balls', packSizes: PACK_PROFILES.balls.sizes, visualLayout: 'packs', maxVisualLayers: 10 },
     '🔑': {
       sizeMm: 55,
       widthMm: 22,
       shape: 'flat',
       stackStepMm: 4,
       bundleKind: 'keys',
-      unitsPerBundle: 8,
+      packSizes: PACK_PROFILES.keys.sizes,
       bundleHeightMm: 72,
       bundleWidthMm: 46,
       maxVisualLayers: 10,
-      visualLayout: 'bundle',
+      visualLayout: 'packs',
     },
   };
 
@@ -336,6 +353,7 @@ export function resolveObjectDimensions(
       fromEmoji.visualLayout,
       fromEmoji.maxVisualLayers,
       fromEmoji.bundleKind,
+      fromEmoji.packSizes,
       fromEmoji.unitsPerBundle,
       fromEmoji.bundleHeightMm,
       fromEmoji.bundleWidthMm,
@@ -344,7 +362,18 @@ export function resolveObjectDimensions(
 
   const heightMm = volumeToHeightMm(grams);
   const widthMm = heightMm * 0.4;
-  return buildDims(heightMm, 'generic', widthMm / heightMm, 'stack', heightMm, widthMm);
+  const generic = buildDims(heightMm, 'generic', widthMm / heightMm, 'stack', heightMm, widthMm);
+  if (heightMm < 120) {
+    return {
+      ...generic,
+      shape: 'disc',
+      visualLayout: 'packs',
+      bundleKind: 'discs',
+      packSizes: PACK_PROFILES.discs.sizes,
+      maxVisualLayers: 10,
+    };
+  }
+  return generic;
 }
 
 export function massBlobDiameterMm(grams: number, densityGPerCm3 = 1.05): number {
@@ -373,12 +402,16 @@ export function stackDisplayHeightPx(
     return heightPx;
   }
 
-  if (dims.visualLayout === 'bundle') {
-    const bundleH = mmToPx(dims.bundleHeightMm ?? dims.sizeMm);
+  if (dims.visualLayout === 'bundle' || dims.visualLayout === 'packs') {
+    const kind = dims.bundleKind ?? 'discs';
+    const sizes = dims.packSizes ?? PACK_PROFILES[kind].sizes;
+    const unitH = mmToPx(PACK_PROFILES[kind].unitH);
     if (count < 1) {
-      return Math.max(bundleH * 0.2, count * mmToPx(dims.stackStepMm));
+      return unitH * 0.35;
     }
-    return Math.max(bundleH, count * mmToPx(dims.stackStepMm));
+    const packs = decomposeIntoPacks(count, sizes);
+    const { totalH } = layoutPacksOnGround(packs, kind, 0, 1000, mmToPx);
+    return Math.max(unitH, totalH);
   }
 
   if (count < 1) {

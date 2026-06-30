@@ -13,6 +13,18 @@ export interface AuthResponse {
   admin: boolean;
 }
 
+export interface LoginResponse {
+  status: 'SUCCESS' | 'BLOCKED_KEY_REQUIRED';
+  token: string | null;
+  username: string | null;
+  admin: boolean | null;
+}
+
+export interface BlockedRevealResponse {
+  title: string;
+  message: string | null;
+}
+
 export type UserGender = 'MALE' | 'FEMALE';
 
 export interface MeResponse {
@@ -46,6 +58,7 @@ export interface AdminUser {
   gender: UserGender;
   admin: boolean;
   blocked: boolean;
+  blockComment: string | null;
   feedbackCount: number;
   unrepliedFeedbackCount: number;
 }
@@ -294,8 +307,23 @@ export const api = {
     captchaId: string;
     captchaAnswer: string;
     rememberMe?: boolean;
-  }): Promise<AuthResponse> {
+  }): Promise<LoginResponse> {
     const res = await fetch(`${API_BASE}/api/auth/login`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(data),
+    });
+    return handleResponse(res);
+  },
+
+  async revealBlockedAccount(data: {
+    username: string;
+    password: string;
+    recoveryKey: string;
+    captchaId: string;
+    captchaAnswer: string;
+  }): Promise<BlockedRevealResponse> {
+    const res = await fetch(`${API_BASE}/api/auth/blocked-reveal`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(data),
@@ -414,10 +442,11 @@ export const api = {
     return handleResponse(res);
   },
 
-  async blockAdminUser(userId: string, adminSession: string): Promise<AdminUser> {
+  async blockAdminUser(userId: string, adminSession: string, comment?: string): Promise<AdminUser> {
     const res = await fetch(`${API_BASE}/api/auth/admin/users/${userId}/block`, {
       method: 'POST',
-      headers: adminHeaders(adminSession),
+      headers: { ...adminHeaders(adminSession), 'Content-Type': 'application/json' },
+      body: JSON.stringify({ comment: comment?.trim() || null }),
     });
     return handleResponse(res);
   },

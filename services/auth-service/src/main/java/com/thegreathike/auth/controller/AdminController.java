@@ -60,10 +60,14 @@ public class AdminController {
     }
 
     @PostMapping("/users/{userId}/block")
-    public AdminUserResponse blockUser(@PathVariable UUID userId, HttpServletRequest request) {
+    public AdminUserResponse blockUser(
+            @PathVariable UUID userId,
+            @RequestBody(required = false) BlockUserRequest body,
+            HttpServletRequest request) {
         AuthContext.requireAdmin(request);
         try {
-            return adminService.blockUser(userId, AuthContext.requireUserId(request));
+            String comment = body == null ? null : body.comment();
+            return adminService.blockUser(userId, AuthContext.requireUserId(request), comment);
         } catch (IllegalArgumentException e) {
             throw new ResponseStatusException(HttpStatus.BAD_REQUEST, e.getMessage());
         }
