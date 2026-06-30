@@ -1,0 +1,11 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64" fill="none">
+  <defs>
+    <linearGradient id="tf" x1="18" y1="16" x2="46" y2="54">
+      <stop stop-color="#7a5230"/>
+      <stop offset="1" stop-color="#5c3a1e"/>
+    </linearGradient>
+  </defs>
+  <ellipse cx="32" cy="56" rx="17" ry="4" fill="#000" opacity="0.14"/>
+  <path d="M20 52c0-12 5-20 12-24s12-6 12-6 6 2 12 6 12 12 12 24c-7 3-14 4-24 4s-17-1-24-4z" fill="url(#tf)"/>
+  <ellipse cx="30" cy="34" rx="6" ry="4" fill="#6b4423" opacity="0.22"/>
+</svg>

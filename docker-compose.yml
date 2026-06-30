@@ -1,0 +1,109 @@
+services:
+  postgres:
+    image: postgres:16-alpine
+    container_name: tgh-postgres
+    environment:
+      POSTGRES_DB: thegreathike
+      POSTGRES_USER: thegreathike
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-thegreathike}
+    ports:
+      - "5433:5432"
+    volumes:
+      - postgres-data:/var/lib/postgresql/data
+      - ./deploy/init-db.sql:/docker-entrypoint-initdb.d/init.sql:ro
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U thegreathike -d thegreathike"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+  db-migrate:
+    image: postgres:16-alpine
+    container_name: tgh-db-migrate
+    environment:
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-thegreathike}
+    volumes:
+      - ./deploy:/migrations:ro
+    entrypoint:
+      - sh
+      - -ec
+      - |
+        export PGPASSWORD="$${POSTGRES_PASSWORD:-thegreathike}"
+        for f in migrate-v2.sql migrate-captcha.sql migrate-recovery-key.sql migrate-v3.sql; do
+          echo "Applying $$f..."
+          psql -h postgres -U thegreathike -d thegreathike -v ON_ERROR_STOP=1 -f "/migrations/$$f"
+        done
+        echo "Migrations complete."
+    depends_on:
+      postgres:
+        condition: service_healthy
+    restart: "no"
+
+  auth-service:
+    build:
+      context: .
+      dockerfile: services/auth-service/Dockerfile
+    container_name: tgh-auth
+    environment:
+      DB_HOST: postgres
+      DB_PORT: 5432
+      DB_NAME: thegreathike
+      DB_USER: thegreathike
+      DB_PASSWORD: ${POSTGRES_PASSWORD:-thegreathike}
+      JWT_SECRET: ${JWT_SECRET:-thegreathike-production-secret-change-me-32b}
+      ADMIN_USERNAME: ${ADMIN_USERNAME:-admin}
+      ADMIN_PASSWORD: ${ADMIN_PASSWORD:-admin}
+      ADMIN_RECOVERY_KEY: ${ADMIN_RECOVERY_KEY:-AdminKey1}
+      ADMIN_SECRET_KEY: ${ADMIN_SECRET_KEY:-change-me-to-a-long-random-admin-secret}
+    depends_on:
+      postgres:
+        condition: service_healthy
+      db-migrate:
+        condition: service_completed_successfully
+
+  tracking-service:
+    build:
+      context: .
+      dockerfile: services/tracking-service/Dockerfile
+    container_name: tgh-tracking
+    environment:
+      DB_HOST: postgres
+      DB_PORT: 5432
+      DB_NAME: thegreathike
+      DB_USER: thegreathike
+      DB_PASSWORD: ${POSTGRES_PASSWORD:-thegreathike}
+      JWT_SECRET: ${JWT_SECRET:-thegreathike-production-secret-change-me-32b}
+      APP_TIMEZONE: ${APP_TIMEZONE:-Europe/Moscow}
+    depends_on:
+      postgres:
+        condition: service_healthy
+      db-migrate:
+        condition: service_completed_successfully
+
+  api-gateway:
+    build:
+      context: .
+      dockerfile: services/api-gateway/Dockerfile
+    container_name: tgh-gateway
+    environment:
+      AUTH_SERVICE_URL: http://auth-service:8081
+      TRACKING_SERVICE_URL: http://tracking-service:8082
+      CORS_ORIGINS: ${CORS_ORIGINS:-http://localhost:3000,http://localhost:5173,http://localhost}
+    expose:
+      - "8080"
+    depends_on:
+      - auth-service
+      - tracking-service
+
+  frontend:
+    build:
+      context: .
+      dockerfile: frontend/Dockerfile
+    container_name: tgh-frontend
+    ports:
+      - "3000:80"
+    depends_on:
+      - api-gateway
+
+volumes:
+  postgres-data:

@@ -1,0 +1,8 @@
+# Обход, когда Docker Hub не отдаёт node:20-alpine (TLS timeout).
+# 1) cd frontend && npm ci && npm run build
+# 2) docker compose -f docker-compose.yml -f docker-compose.prebuilt-frontend.yml up --build -d
+services:
+  frontend:
+    build:
+      context: .
+      dockerfile: frontend/Dockerfile.prebuilt

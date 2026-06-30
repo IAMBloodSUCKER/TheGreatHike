@@ -1,0 +1,41 @@
+server:
+  port: 8081
+
+spring:
+  application:
+    name: auth-service
+  datasource:
+    url: jdbc:postgresql://${DB_HOST:localhost}:${DB_PORT:5432}/${DB_NAME:thegreathike}
+    username: ${DB_USER:thegreathike}
+    password: ${DB_PASSWORD:thegreathike}
+  jpa:
+    hibernate:
+      ddl-auto: update
+    open-in-view: false
+    properties:
+      hibernate:
+        default_schema: auth
+
+app:
+  jwt:
+    secret: ${JWT_SECRET:thegreathike-dev-secret-key-change-in-production-32chars}
+    expiration-ms: 86400000
+    remember-expiration-ms: 2592000000
+  admin:
+    username: ${ADMIN_USERNAME:admin}
+    password: ${ADMIN_PASSWORD:admin}
+    recovery-key: ${ADMIN_RECOVERY_KEY:AdminKey1}
+    secret-key: ${ADMIN_SECRET_KEY:change-me-to-a-long-random-admin-secret}
+    session-ttl-ms: 1800000
+  security:
+    rate-limit:
+      captcha-per-minute: 12
+      auth-per-minute: 30
+      login-failures: 8
+      login-lock-minutes: 15
+
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health

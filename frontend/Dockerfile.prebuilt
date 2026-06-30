@@ -1,0 +1,6 @@
+# Сборка фронта на хосте: cd frontend && npm ci && npm run build
+# Затем: docker compose -f docker-compose.yml -f docker-compose.prebuilt-frontend.yml up --build -d
+FROM nginx:alpine
+COPY frontend/nginx.conf /etc/nginx/conf.d/default.conf
+COPY frontend/dist /usr/share/nginx/html
+EXPOSE 80
