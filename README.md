@@ -18,15 +18,9 @@
 ## Интерфейс
 
 <p align="center">
-  <img src="docs/readme-features.png" alt="Скриншоты TheGreatHike: главная, запись визита, статистика, вход и журнал" width="920">
+  <img src="docs/screenshots/dashboard.png" width="440" alt="Статистика"> 
+  <img src="docs/screenshots/visit.png" width="440" alt="Запись визита">
 </p>
-
-| | |
-|:---:|:---:|
-| **Запись визита** — шкала Бристоля, цвет, масса | **Статистика** — периоды, сравнения, график |
-| <img src="docs/screenshots/visit.png" width="420" alt="Форма записи визита"> | <img src="docs/screenshots/dashboard.png" width="420" alt="Дашборд со статистикой"> |
-| **Вход** — капча, восстановление пароля | **Журнал** — недавние визиты |
-| <img src="docs/screenshots/auth.png" width="380" alt="Форма входа"> | <img src="docs/screenshots/recent.png" width="420" alt="Список недавних визитов"> |
 
 ## Запуск
 
